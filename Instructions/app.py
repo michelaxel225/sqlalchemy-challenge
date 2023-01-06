@@ -1,170 +1,165 @@
 import numpy as np
+
 import sqlalchemy
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, func
 
 from flask import Flask, jsonify
+import datetime as dt
+#database set up
+engine=create_engine('sqlite:///Resources/hawaii.sqlite')
 
-
-##################### database set up ####################
-
-# database set up
-engine = create_engine("sqlite:///Resources/hawaii.sqlite")
-Base = automap_base()
+Base= automap_base()
 Base.prepare(engine, reflect=True)
+Base.classes.keys()
+measurements=Base.classes.measurement
+stations=Base.classes.station
 
-# Save reference to the table
-measurement = Base.classes.measurement
-station = Base.classes.station
+#flask set up
+app=Flask(__name__)
 
-# Create Session  From Python to the DB
-session = Session(engine)
 
-####################### flack set up ######################
-app = Flask(__name__)
-
-####################### flack routes ######################
-# * `/`
-#     * Homepage.
-#     * List all available routes.
 @app.route("/")
-def Homepage():
+def welcome():
+    '''list possible routes possible for consumer'''
     return (
-        f"Available Routes:<br/>"
-        f"/api/v1.0/precipitation<br/>"
-        f"/api/v1.0/stations<br/>"
-        f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/yyyy-mm-dd<br/>"
-        f"/api/v1.0/yyyy-mm-dd/yyyy-mm-dd"
+        'Available Routes: <br/>'
+        f'/api/v1.0/precipitation<br/>'
+        f'/api/v1.0/stations<br/>'
+        f'/api/v1.0/tobs<br/>'
+        f'Please enter date in this format YYYY-MM-DD<br/>'
+        f'/api/v1.0/start_date$end_date<br/>'
+        f'/api/v1.0/start_date'
     )
 
-
-
-# * `/api/v1.0/precipitation`
-#     * Convert the query results to a dictionary using `date` as the key and `prcp` as the value.
-#     * Return the JSON representation of your dictionary.
 @app.route("/api/v1.0/precipitation")
 def precipitation():
+    # Create our session (link) from Python to the DB
     session = Session(engine)
-    results = session.query(measurement.date, measurement.prcp).all()
+
+    """Return a list of all passenger names"""
+    # Query all passengers
+    results = session.query(measurements.date, measurements.prcp).\
+        filter(measurements.date>=(dt.date(2017,8,23)-dt.timedelta(days=365))).all()
+
     session.close()
 
-    measurement_list = []
-    for key,value in results:
-        measurement_dict = {key : value}
-        measurement_list.append(measurement_dict)
-    return jsonify(measurement_list)
+    # Convert list of tuples into normal list
+    prcp_date = []
+    for date, prcp in results:
+        prcp_name={}
+        prcp_name['station']=date
+        prcp_name['precipitation']=prcp
+        prcp_date.append(prcp_name) 
 
+    return jsonify(prcp_date)
 
-
-
-# * `/api/v1.0/stations`
-#     * Return a JSON list of stations from the dataset.
 @app.route("/api/v1.0/stations")
-def stations():
-    global station
+def stat():
+    # Create our session (link) from Python to the DB
     session = Session(engine)
-    results2 = session.query(station.id, station.station,station.name, station.latitude, station.longitude, station.elevation).all()
+
+    """Return a list of all station names"""
+    # Query all stations and names
+    results = session.query(stations.station, stations.name).all()
+
     session.close()
 
-    station_list = []
-    for id, station, name, latitude, longitude, elevation in results2:
-        station_dict = {}
-        station_dict["id"] = id
-        station_dict["station"] = station
-        station_dict["name"] = name
-        station_dict["latitude"] = latitude
-        station_dict["longitude"] = longitude
-        station_dict["elevation"] = elevation
-        station_list.append(station_dict)
-    return jsonify(station_list)
+    # Convert list of tuples into normal list
+    station_data = []
+    for station, name in results:
+        stat_name={}
+        stat_name['station']=station
+        stat_name['name']=name
+        station_data.append(stat_name)
 
+    return jsonify(station_data)
 
-
-# * `/api/v1.0/tobs`
-#     * Query the dates and temperature observations of the most active station for the previous year of data.
-#     * Return a JSON list of temperature observations (TOBS) for the previous year.
 @app.route("/api/v1.0/tobs")
 def tobs():
+    # Create our session (link) from Python to the DB
     session = Session(engine)
-    results3 = session.query(measurement.date, measurement.tobs).\
-    filter(measurement.date >= '2016-08-23').\
-    filter(measurement.station == 'USC00519281').all()
+
+    """Return a list of all station names"""
+    # Query all
+    results = session.query(measurements.date, measurements.tobs).\
+        filter(measurements.date>(dt.date(2017,8,23)-dt.timedelta(days=365)))\
+            .filter(stations.station =='USC00519281').all()
+
     session.close()
 
-    tobs_list = []
-    for date,tobs in results3:
-        tobs_dict = {}
-        tobs_dict["date"] = date
-        tobs_dict["tobs"] = tobs
-        tobs_list.append(tobs_dict)
-    return jsonify(tobs_list)
+    # Convert list of tuples to something else
+    temp_data = []
+    for datet, temperature in results:
+        temp_name={}
+        temp_name['Date']=datet
+        temp_name['Temperature']=temperature
+        temp_data.append(temp_name)
 
+    return jsonify(temp_data)
 
-
-
-
-# * `/api/v1.0/<start>` and `/api/v1.0/<start>/<end>`
-#     * Return a JSON list of the minimum temperature, the average temperature, and the maximum temperature for a given start or start-end range.
-#     * When given the start only, calculate `TMIN`, `TAVG`, and `TMAX` for all dates greater than or equal to the start date.
-#     * When given the start and the end date, calculate the `TMIN`, `TAVG`, and `TMAX` for dates from the start date through the end date (inclusive).
-
-
-
-
-@app.route("/api/v1.0/<start>")
-def start(start):
+@app.route("/api/v1.0/<start_date>$<end_date>")
+def start_2(start_date, end_date):
+    # '2017-08-16' formart the date should come 
+    """Fetch the Justice League character whose real_name matches
+       the path variable supplied by the user, or a 404 if not."""
+    #connect to database 
     session = Session(engine)
-    results4 = session.query(measurement.date,
-                            func.min(measurement.tobs),
-                            func.avg(measurement.tobs),
-                            func.max(measurement.tobs)).\
-                filter(measurement.date >= start).all()
+
+    """Return a list of all station names"""
+    # Query all
+    sel=[func.min(measurements.tobs),
+        func.max(measurements.tobs),
+        func.avg(measurements.tobs)
+        ]
+    results = session.query(*sel).\
+        filter(measurements.date>str(start_date)).filter(measurements.date<=end_date).all()
+
     session.close()
 
-    start_list = []
-    for date, minimum, mean, maximum in results4:
-        start_dict = {}
-        start_dict["date"] = start
-        start_dict["minimum"] = minimum
-        start_dict["mean"] = mean
-        start_dict["maximum"] = maximum
-        start_list.append(start_dict)
-    return jsonify(start_list)
+        #once we have results
+        #make able to be displayed 
+    start_temp_data = []
+    for min, max, avg in results:
+        temp_name={}
+        temp_name['min']=min
+        temp_name['max']=max
+        temp_name['avg']=avg
+        start_temp_data.append(temp_name)
 
+    return jsonify(start_temp_data)
 
-
-
-@app.route("/api/v1.0/<start>/<end>")
-def startend(start,end):
-   
+@app.route("/api/v1.0/<start_date>")
+def start_end(start_date):
+    # '2017-08-16' formart the date should come 
+    """Fetch the Justice League character whose real_name matches
+       the path variable supplied by the user, or a 404 if not."""
+    #connect to database 
     session = Session(engine)
-    results5 = session.query(measurement.date,
-                            func.min(measurement.tobs),
-                            func.avg(measurement.tobs),
-                            func.max(measurement.tobs)).\
-                filter(measurement.date >= start).\
-                filter(measurement.date < end).all()
+
+    """Return a list of all station names"""
+    # Query all
+    sel=[func.min(measurements.tobs),
+        func.max(measurements.tobs),
+        func.avg(measurements.tobs)
+        ]
+    results = session.query(*sel).\
+        filter(measurements.date>str(start_date)).all()
+
     session.close()
 
+        #once we have results
+        #make able to be displayed 
+    start_temp_data = []
+    for min, max, avg in results:
+        temp_name={}
+        temp_name['min']=min
+        temp_name['max']=max
+        temp_name['avg']=avg
+        start_temp_data.append(temp_name)
 
-    startend_list = []
-    for date,minimum,mean,maximum in results5:
-        startend_dict = {}
-        startend_dict["startdate"] = start
-        startend_dict["enddate"] = end
-        startend_dict["minimum"] = minimum
-        startend_dict["mean"] = mean
-        startend_dict["maximum"] = maximum
-        startend_list.append(startend_dict)
-    return jsonify(startend_list)
+    return jsonify(start_temp_data)
 
-
-
-
-
-
-####################### Define main behavior ######################
 if __name__ == '__main__':
     app.run(debug=True)
